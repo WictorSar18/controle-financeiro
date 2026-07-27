@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -1053,38 +1053,34 @@ function showToast(msg){
 // ═══════════════════════════════════
 async function carregarDados(){
   try{
+    // Sempre limpa antes de carregar do Supabase
+    dados={}; investimentos={}; dividasLista=[];
+
     const{data:lanc,error:e1}=await sb.from('lancamentos').select('*');
     if(e1) throw e1;
-    if(lanc&&lanc.length){
-      dados={};
-      lanc.forEach(row=>{
-        if(!dados[row.ano]) dados[row.ano]={};
-        if(!dados[row.ano][row.mes]) dados[row.ano][row.mes]={entradas:[],saidas:[]};
-        if(row.tipo==='entrada') dados[row.ano][row.mes].entradas.push({desc:row.descricao||'',valor:+row.valor||0});
-        else dados[row.ano][row.mes].saidas.push({desc:row.descricao||'',cat:row.categoria||'outros',valor:+row.valor||0});
-      });
-    }
+    (lanc||[]).forEach(row=>{
+      if(!dados[row.ano]) dados[row.ano]={};
+      if(!dados[row.ano][row.mes]) dados[row.ano][row.mes]={entradas:[],saidas:[]};
+      if(row.tipo==='entrada') dados[row.ano][row.mes].entradas.push({desc:row.descricao||'',valor:+row.valor||0});
+      else dados[row.ano][row.mes].saidas.push({desc:row.descricao||'',cat:row.categoria||'outros',valor:+row.valor||0});
+    });
+
     const{data:inv,error:e2}=await sb.from('investimentos').select('*');
     if(e2) throw e2;
-    if(inv&&inv.length){
-      investimentos={};
-      inv.forEach(row=>{
-        if(!investimentos[row.ano]) investimentos[row.ano]={};
-        if(!investimentos[row.ano][row.mes]) investimentos[row.ano][row.mes]=[];
-        investimentos[row.ano][row.mes].push({nome:row.nome||'',valor:+row.valor||0});
-      });
-    }
+    (inv||[]).forEach(row=>{
+      if(!investimentos[row.ano]) investimentos[row.ano]={};
+      if(!investimentos[row.ano][row.mes]) investimentos[row.ano][row.mes]=[];
+      investimentos[row.ano][row.mes].push({nome:row.nome||'',valor:+row.valor||0});
+    });
 
-    // Carregar dívidas
     const{data:div,error:e3}=await sb.from('dividas').select('*');
-    if(!e3&&div&&div.length){
-      dividasLista=div.map(row=>({
-        nome:row.nome||'',
-        valorTotal:+row.valor_total||0,
-        qtd:+row.qtd||0,
-        parcelas:typeof row.parcelas==='string'?JSON.parse(row.parcelas):(row.parcelas||[])
-      }));
-    }
+    if(e3) throw e3;
+    dividasLista=(div||[]).map(row=>({
+      nome:row.nome||'',
+      valorTotal:+row.valor_total||0,
+      qtd:+row.qtd||0,
+      parcelas:typeof row.parcelas==='string'?JSON.parse(row.parcelas):(row.parcelas||[])
+    }));
 
     const badge=document.getElementById('sync-badge');
     badge.innerHTML='<span class="sync-dot" style="background:var(--green);animation:none"></span>Conectado';
@@ -1102,18 +1098,6 @@ async function carregarDados(){
     loadMesForm();
   }
 }
-
-// Dados históricos de exemplo para não começar vazio
-dados={
-  '2026':{
-    '2':{entradas:[{desc:'Salário',valor:1677}],saidas:[{desc:'Cartão de crédito',cat:'outros',valor:2407.54},{desc:'Aluguel+Água+Luz',cat:'moradia',valor:1750},{desc:'Outros',cat:'outros',valor:341.48}]},
-    '3':{entradas:[{desc:'Pró-labore',valor:2500},{desc:'Freelance',valor:1333.33}],saidas:[{desc:'Cartão',cat:'outros',valor:2171.64},{desc:'Aluguel+Água+Luz',cat:'moradia',valor:1750},{desc:'Outros',cat:'outros',valor:210}]},
-    '4':{entradas:[],saidas:[{desc:'Cartão',cat:'outros',valor:2348.39},{desc:'Aluguel+Água+Luz',cat:'moradia',valor:2100},{desc:'Outros',cat:'outros',valor:968.31}]},
-    '5':{entradas:[],saidas:[{desc:'Cartão',cat:'outros',valor:3124.03},{desc:'Aluguel+Água+Luz',cat:'moradia',valor:2717},{desc:'Outros',cat:'outros',valor:800}]},
-    '6':{entradas:[],saidas:[{desc:'Cartão',cat:'outros',valor:1126.55},{desc:'Outros',cat:'outros',valor:2717}]},
-    '7':{entradas:[],saidas:[{desc:'Cartão',cat:'outros',valor:722.66}]},
-  }
-};
 
 carregarDados();
 </script>
