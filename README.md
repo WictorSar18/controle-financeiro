@@ -345,7 +345,7 @@ const CAT_SAIDAS=[
   {value:'saude',       label:'Saúde / Farmácia'},
   {value:'educacao',    label:'Educação / Cursos'},
   {value:'lazer',       label:'Lazer / Entretenimento'},
-  {value:'vestuario',   label:'Roupas / Vestuário'},
+  {value:'vestuario',   label:'Roupas / Vestuário / Presente'},
   {value:'impostos',    label:'Impostos / Contador'},
   {value:'assinaturas', label:'Assinaturas / Streaming'},
   {value:'viagem',      label:'Viagem / Hospedagem'},
