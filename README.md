@@ -345,7 +345,7 @@ const CAT_SAIDAS=[
   {value:'saude',       label:'Saúde / Farmácia'},
   {value:'educacao',    label:'Educação / Cursos'},
   {value:'lazer',       label:'Lazer / Entretenimento'},
-  {value:'vestuario',   label:'Roupas / Vestuário / Presente'},
+  {value:'vestuario',   label:'Roupas / Vestuário / Presentes'},
   {value:'impostos',    label:'Impostos / Contador'},
   {value:'assinaturas', label:'Assinaturas / Streaming'},
   {value:'viagem',      label:'Viagem / Hospedagem'},
@@ -915,6 +915,30 @@ function parcPreview(){
   else el.textContent='';
 }
 
+// ── Salvar dívidas no Supabase ──────────────────────────────────────────────
+async function salvarDividas(){
+  try{
+    // Busca IDs existentes e deleta
+    const{data:existing}=await sb.from('dividas').select('id');
+    if(existing&&existing.length){
+      const ids=existing.map(r=>r.id);
+      await sb.from('dividas').delete().in('id',ids);
+    }
+    if(!dividasLista.length) return;
+    const rows=dividasLista.map(d=>({
+      nome:d.nome,
+      valor_total:d.valorTotal,
+      qtd:d.qtd,
+      parcelas:d.parcelas
+    }));
+    const{error}=await sb.from('dividas').insert(rows);
+    if(error) throw error;
+  }catch(e){
+    console.error('Erro ao salvar dividas:',e);
+    showToast('⚠ Erro ao salvar: '+e.message);
+  }
+}
+
 function adicionarDivida(){
   const desc=document.getElementById('parc-desc').value.trim();
   const valor=parseFloat(document.getElementById('parc-valor').value)||0;
@@ -922,7 +946,6 @@ function adicionarDivida(){
   const mes=parseInt(document.getElementById('parc-mes-inicio').value);
   const ano=document.getElementById('parc-ano-inicio').value;
   if(!desc||!valor||!qtd){showToast('❌ Preencha todos os campos');return;}
-  // Gera lista de parcelas
   const vlrParc=+(valor/qtd).toFixed(2);
   const parcelas=[];
   let a=+ano;let m=mes;
@@ -936,18 +959,22 @@ function adicionarDivida(){
   document.getElementById('parc-qtd').value='';
   document.getElementById('parc-preview').textContent='';
   renderParcelas();
-  showToast('✓ Dívida adicionada!');
+  salvarDividas();
+  showToast('✓ Dívida adicionada e salva!');
 }
 
 function toggleParcela(dIdx,pIdx){
   dividasLista[dIdx].parcelas[pIdx].pago=!dividasLista[dIdx].parcelas[pIdx].pago;
   renderParcelas();
+  salvarDividas();
 }
 
 function removerDivida(idx){
   if(!confirm('Remover esta dívida?')) return;
   dividasLista.splice(idx,1);
   renderParcelas();
+  salvarDividas();
+  showToast('✓ Dívida removida!');
 }
 
 function renderParcelas(){
@@ -1047,6 +1074,18 @@ async function carregarDados(){
         investimentos[row.ano][row.mes].push({nome:row.nome||'',valor:+row.valor||0});
       });
     }
+
+    // Carregar dívidas
+    const{data:div,error:e3}=await sb.from('dividas').select('*');
+    if(!e3&&div&&div.length){
+      dividasLista=div.map(row=>({
+        nome:row.nome||'',
+        valorTotal:+row.valor_total||0,
+        qtd:+row.qtd||0,
+        parcelas:typeof row.parcelas==='string'?JSON.parse(row.parcelas):(row.parcelas||[])
+      }));
+    }
+
     const badge=document.getElementById('sync-badge');
     badge.innerHTML='<span class="sync-dot" style="background:var(--green);animation:none"></span>Conectado';
     badge.style.background='rgba(21,128,61,.12)';badge.style.color='var(--green)';
