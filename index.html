@@ -328,8 +328,8 @@ tr:hover td{background:var(--bg3)}
 // ═══════════════════════════════════
 // SUPABASE
 // ═══════════════════════════════════
-const SUPABASE_URL='https://itsxvvhqhilsvauqqeax.supabase.co'; // ex: https://xyzxyz.supabase.co
-const SUPABASE_KEY='sb_publishable_Wq_LI_05HqS7Sg26wxYkQA_hZam-MBO'; // Settings → API → publishable key
+const SUPABASE_URL='SUA_URL_AQUI'; // ex: https://xyzxyz.supabase.co
+const SUPABASE_KEY='SUA_CHAVE_AQUI'; // Settings → API → publishable key
 let sb=null;
 try{ sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY); }
 catch(e){ console.error('Supabase não configurado:',e); }
@@ -678,7 +678,7 @@ async function salvarMes(){
   const btn=document.querySelector('[onclick="salvarMes()"]');
   btn.disabled=true;btn.textContent='Salvando...';
   try{
-    await sb.from('lancamentos').delete().eq('ano',ano).eq('mes',mes);
+    await sb.from('lancamentos').delete().eq('ano',ano).eq('mes',mes).in('tipo',['entrada','saida']);
     const rows=[
       ...d.entradas.filter(e=>e.desc||e.valor).map(e=>({ano,mes,tipo:'entrada',descricao:e.desc,categoria:null,valor:+e.valor||0})),
       ...d.saidas.filter(s=>s.desc||s.valor).map(s=>({ano,mes,tipo:'saida',descricao:s.desc,categoria:s.cat,forma_pgto:s.pgto||null,valor:+s.valor||0}))
@@ -804,11 +804,61 @@ async function salvarInvestimentos(){
 // ═══════════════════════════════════
 // HISTÓRICO
 // ═══════════════════════════════════
+// Renda de referência do mês: valor informado (se houver) ou soma das Entradas
+function getRenda(ano,mes){
+  const d=(dados[ano]||{})[mes]||{};
+  const ent=sumArr(d.entradas||[]);
+  const manual=+d.renda||0;
+  return {valor:manual>0?manual:ent,manual,ent};
+}
+
+async function salvarRenda(){
+  const{ano,mes}=periodoAtivo.hist;
+  const v=parseFloat(document.getElementById('renda-input').value)||0;
+  ensureMes(ano,mes);
+  dados[ano][mes].renda=v;
+  try{
+    if(!sb) throw new Error('Supabase não configurado');
+    await sb.from('lancamentos').delete().eq('ano',ano).eq('mes',mes).eq('tipo','renda');
+    if(v>0){
+      const{error}=await sb.from('lancamentos').insert([{ano,mes,tipo:'renda',descricao:'Renda do mês',categoria:null,valor:v}]);
+      if(error) throw error;
+    }
+    showToast('✓ Renda salva!');
+  }catch(e){showToast('❌ Erro: '+e.message);}
+  renderHistorico();
+}
+
 function renderHistorico(){
   const{ano,mes}=periodoAtivo.hist;
   const d=(dados[ano]||{})[mes]||{entradas:[],saidas:[]};
   const inv=((investimentos[ano]||{})[mes])||[];
   const m=getMesData(ano,mes);
+  const rInfo=getRenda(ano,mes);
+  const renda=rInfo.valor;
+  const pct=renda>0?m.saida/renda*100:0;
+  const corBarra=pct<=70?'var(--green)':(pct<=100?'#b45309':'var(--red)');
+  const origem=rInfo.manual>0?'Valor informado por você (substitui as entradas).':(rInfo.ent>0?'Usando o total das Entradas lançadas no mês. Digite um valor para substituir.':'Nenhuma entrada lançada neste mês. Digite quanto você ganhou.');
+  const rendaBlock=`
+    <div class="table-card" style="padding:18px 20px;margin-bottom:20px">
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between">
+        <div class="field" style="min-width:230px">
+          <label>Renda do mês (R$)</label>
+          <div style="display:flex;gap:8px">
+            <input type="number" id="renda-input" step="0.01" placeholder="${rInfo.ent>0?'Entradas: '+brl(rInfo.ent):'0,00'}" value="${rInfo.manual||''}">
+            <button class="btn btn-primary" onclick="salvarRenda()">Salvar</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);max-width:320px">${origem}</div>
+      </div>
+      ${renda>0?`
+      <div style="margin-top:16px">
+        <div style="height:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;overflow:hidden"><div style="width:${Math.min(pct,100)}%;height:100%;background:${corBarra}"></div></div>
+        <p style="margin-top:10px;font-size:14px;line-height:1.6">Você gastou <strong>${brl(m.saida)}</strong>, que é <strong style="color:${corBarra}">${pct.toFixed(1)}%</strong> da renda de <strong>${brl(renda)}</strong>.
+        ${renda-m.saida>=0?`Sobraram <strong class="pos">${brl(renda-m.saida)}</strong>.`:`Isso é <strong class="neg">${brl(m.saida-renda)}</strong> a mais do que você ganhou.`}
+        ${m.inv>0?`Investido: <strong>${brl(m.inv)}</strong> (${(m.inv/renda*100).toFixed(1)}% da renda).`:''}</p>
+      </div>`:''}
+    </div>`;
 
   // Calcular totais por categoria para saídas
   const catTots={};
@@ -823,6 +873,7 @@ function renderHistorico(){
       <div class="card teal"><div class="card-label">Investimentos</div><div class="card-value">${brl(m.inv)}</div></div>
       <div class="card ${m.saldo>=0?'green':'red'}"><div class="card-label">Saldo</div><div class="card-value">${brl(m.saldo)}</div></div>
     </div>
+    ${rendaBlock}
     <div class="grid2">
       <div class="table-card" style="margin-bottom:0">
         <div class="table-head"><h3>Entradas</h3><span style="font-size:12px;color:var(--muted)">${getMesLabel(ano,mes)}</span></div>
@@ -834,10 +885,10 @@ function renderHistorico(){
       </div>
       <div class="table-card" style="margin-bottom:0">
         <div class="table-head"><h3>Saídas por categoria</h3><span style="font-size:12px;color:var(--muted)">crescente</span></div>
-        <table><thead><tr><th>Categoria</th><th>Valor</th><th>%</th></tr></thead>
+        <table><thead><tr><th>Categoria</th><th>Valor</th><th>% saídas</th>${renda>0?'<th>% renda</th>':''}</tr></thead>
         <tbody>
-          ${catSorted.map(([cat,val])=>`<tr><td>${(CAT_SAIDAS.find(c=>c.value===cat)||{label:cat}).label}</td><td class="mono neg">${brl(val)}</td><td class="mono" style="color:var(--muted)">${totalSaidas?(val/totalSaidas*100).toFixed(1):0}%</td></tr>`).join('')}
-          ${catSorted.length?`<tr style="background:var(--bg3)"><td style="font-weight:700">Total</td><td class="mono neg" style="font-weight:700">${brl(totalSaidas)}</td><td class="mono" style="font-weight:700">100%</td></tr>`:'<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:18px">Sem saídas</td></tr>'}
+          ${catSorted.map(([cat,val])=>`<tr><td>${(CAT_SAIDAS.find(c=>c.value===cat)||{label:cat}).label}</td><td class="mono neg">${brl(val)}</td><td class="mono" style="color:var(--muted)">${totalSaidas?(val/totalSaidas*100).toFixed(1):0}%</td>${renda>0?`<td class="mono" style="color:var(--muted)">${(val/renda*100).toFixed(1)}%</td>`:''}</tr>`).join('')}
+          ${catSorted.length?`<tr style="background:var(--bg3)"><td style="font-weight:700">Total</td><td class="mono neg" style="font-weight:700">${brl(totalSaidas)}</td><td class="mono" style="font-weight:700">100%</td>${renda>0?`<td class="mono" style="font-weight:700">${(totalSaidas/renda*100).toFixed(1)}%</td>`:''}</tr>`:'<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:18px">Sem saídas</td></tr>'}
         </tbody></table>
       </div>
     </div>
@@ -1096,7 +1147,8 @@ async function carregarDados(){
     (lanc||[]).forEach(row=>{
       if(!dados[row.ano]) dados[row.ano]={};
       if(!dados[row.ano][row.mes]) dados[row.ano][row.mes]={entradas:[],saidas:[]};
-      if(row.tipo==='entrada') dados[row.ano][row.mes].entradas.push({desc:row.descricao||'',valor:+row.valor||0});
+      if(row.tipo==='renda') dados[row.ano][row.mes].renda=+row.valor||0;
+      else if(row.tipo==='entrada') dados[row.ano][row.mes].entradas.push({desc:row.descricao||'',valor:+row.valor||0});
       else dados[row.ano][row.mes].saidas.push({desc:row.descricao||'',cat:row.categoria||'outros',pgto:row.forma_pgto||'',valor:+row.valor||0});
     });
 
